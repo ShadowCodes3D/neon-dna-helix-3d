@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Neon DNA Zoom Fly-Through</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #000000;
+    overflow: hidden;
+  }
+  #canvas-container {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #000000;
+  }
+  canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+  }
+</style>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+  const RENDER_WIDTH = 1080;
+  const RENDER_HEIGHT = 1320;
+  const DURATION = 30.0;
+  const BASE_Z = 31.0;
+
+  const container = document.getElementById('canvas-container');
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+
+  const camera = new THREE.PerspectiveCamera(50, RENDER_WIDTH / RENDER_HEIGHT, 0.1, 500);
+  camera.position.set(0, 0, BASE_Z);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  renderer.setSize(RENDER_WIDTH, RENDER_HEIGHT, false);
+  renderer.setPixelRatio(1);
+  container.appendChild(renderer.domElement);
+
+  const dnaGroup = new THREE.Group();
+  dnaGroup.position.y = 0;
+  scene.add(dnaGroup);
+
+  // 1. Build 3D Neon DNA Helix (Fitted cleanly within 1080x1320 width)
+  const strandParticles = 14000;
+  const rungCount = 34;
+  const particlesPerRung = 240;
+  const rungParticles = rungCount * particlesPerRung;
+  const innerAtomParticles = 3400;
+  const totalParticles = strandParticles + rungParticles + innerAtomParticles;
+
+  const startPos = new Float32Array(totalParticles * 3);
+  const targetPos = new Float32Array(totalParticles * 3);
+  const warpVel = new Float32Array(totalParticles * 3);
+  const colors = new Float32Array(totalParticles * 3);
+  const scales = new Float32Array(totalParticles);
+  const phases = new Float32Array(totalParticles);
+
+  const cyan = new THREE.Color(0x00f2ff);
+  const blue = new THREE.Color(0x3a86ff);
+  const purple = new THREE.Color(0x9d4edd);
+  const pink = new THREE.Color(0xff2a85);
+  const white = new THREE.Color(0xffffff);
+
+  const helixHeight = 17.5;
+  const helixRadius = 2.85;
+  const turns = 2.5;
+
+  let idx = 0;
+
+  function setParticle(i, tx, ty, tz, color, scale) {
+    const i3 = i * 3;
+    targetPos[i3] = tx;
+    targetPos[i3 + 1] = ty;
+    targetPos[i3 + 2] = tz;
+
+    const sAngle = Math.random() * Math.PI * 2;
+    const sRad = 10 + Math.random() * 14;
+    startPos[i3] = Math.cos(sAngle) * sRad;
+    startPos[i3 + 1] = ty + (Math.random() - 0.5) * 14;
+    startPos[i3 + 2] = Math.sin(sAngle) * sRad;
+
+    const wAngle = Math.atan2(tz, tx) + (Math.random() - 0.5) * 1.4;
+    const wSpeed = 6 + Math.random() * 18;
+    warpVel[i3] = Math.cos(wAngle) * wSpeed;
+    warpVel[i3 + 1] = (Math.random() - 0.5) * 15;
+    warpVel[i3 + 2] = Math.sin(wAngle) * wSpeed;
+
+    colors[i3] = color.r;
+    colors[i3 + 1] = color.g;
+    colors[i3 + 2] = color.b;
+
+    scales[i] = scale;
+    phases[i] = Math.random() * Math.PI * 2;
+  }
+
+  for (let i = 0; i < strandParticles; i++) {
+    const strand = i % 2;
+    const u = Math.random();
+    const y = (u - 0.5) * helixHeight;
+    const angle = u * Math.PI * 2 * turns + (strand === 1 ? Math.PI : 0);
+
+    const spread = Math.pow(Math.random(), 1.6) * 0.42;
+    const a2 = Math.random() * Math.PI * 2;
+    const tx = Math.cos(angle) * helixRadius + Math.cos(a2) * spread;
+    const ty = y + (Math.random() - 0.5) * 0.3;
+    const tz = Math.sin(angle) * helixRadius + Math.sin(a2) * spread;
+
+    const c = new THREE.Color();
+    if (strand === 0) c.copy(cyan).lerp(blue, u);
+    else c.copy(purple).lerp(pink, u);
+    if (Math.random() < 0.08) c.lerp(white, 0.7);
+
+    setParticle(idx++, tx, ty, tz, c, 0.75 + Math.random() * 1.05);
+  }
+
+  for (let r = 0; r < rungCount; r++) {
+    const u = (r + 0.5) / rungCount;
+    const y = (u - 0.5) * helixHeight;
+    const angle = u * Math.PI * 2 * turns;
+
+    const x1 = Math.cos(angle) * helixRadius;
+    const z1 = Math.sin(angle) * helixRadius;
+    const x2 = Math.cos(angle + Math.PI) * helixRadius;
+    const z2 = Math.sin(angle + Math.PI) * helixRadius;
+
+    for (let p = 0; p < particlesPerRung; p++) {
+      const f = Math.random();
+      const jitter = 0.12;
+      const tx = x1 + (x2 - x1) * f + (Math.random() - 0.5) * jitter;
+      const ty = y + (Math.random() - 0.5) * jitter;
+      const tz = z1 + (z2 - z1) * f + (Math.random() - 0.5) * jitter;
+
+      const c = new THREE.Color();
+      if (f < 0.5) c.copy(cyan).lerp(white, f * 0.5);
+      else c.copy(pink).lerp(white, (1 - f) * 0.5);
+
+      setParticle(idx++, tx, ty, tz, c, 0.6 + Math.random() * 0.7);
+    }
+  }
+
+  for (let i = 0; i < innerAtomParticles; i++) {
+    const u = Math.random();
+    const y = (u - 0.5) * helixHeight;
+    const r = Math.sqrt(Math.random()) * (helixRadius * 0.82);
+    const a = Math.random() * Math.PI * 2;
+    const tx = Math.cos(a) * r;
+    const tz = Math.sin(a) * r;
+
+    const c = new THREE.Color();
+    const pick = Math.random();
+    if (pick < 0.4) c.copy(cyan);
+    else if (pick < 0.75) c.copy(purple);
+    else c.copy(white);
+
+    setParticle(idx++, tx, y, tz, c, 0.45 + Math.random() * 0.85);
+  }
+
+  const dnaGeo = new THREE.BufferGeometry();
+  dnaGeo.setAttribute('position', new THREE.BufferAttribute(startPos, 3));
+  dnaGeo.setAttribute('aTarget', new THREE.BufferAttribute(targetPos, 3));
+  dnaGeo.setAttribute('aWarp', new THREE.BufferAttribute(warpVel, 3));
+  dnaGeo.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
+  dnaGeo.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
+  dnaGeo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
+
+  const dnaMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uProgress: { value: 0 },
+      uWarpTime: { value: 0 },
+      uFadeOut: { value: 1 }
+    },
+    vertexShader: `
+      uniform float uTime;
+      uniform float uProgress;
+      uniform float uWarpTime;
+      uniform float uFadeOut;
+      attribute vec3 aTarget;
+      attribute vec3 aWarp;
+      attribute vec3 aColor;
+      attribute float aScale;
+      attribute float aPhase;
+      varying vec3 vColor;
+      varying float vAlpha;
+
+      void main() {
+        float ease = 1.0 - pow(1.0 - uProgress, 3.0);
+        vec3 pos = mix(position, aTarget, ease);
+
+        float swirl = (1.0 - ease) * 2.5;
+        float s = sin(swirl);
+        float c = cos(swirl);
+        pos.xz = mat2(c, -s, s, c) * pos.xz;
+
+        float waveY = mod(uTime * 5.8, 24.0) - 12.0;
+        float waveDist = abs(pos.y - waveY);
+        float waveBoost = exp(-waveDist * waveDist * 0.25) * ease;
+
+        pos.x += sin(uTime * 1.6 + aPhase) * 0.05 * ease;
+        pos.y += cos(uTime * 1.4 + aPhase) * 0.05 * ease;
+        pos.z += cos(uTime * 1.6 + aPhase) * 0.05 * ease;
+
+        if (uWarpTime > 0.0) {
+          pos += aWarp * pow(uWarpTime, 1.35);
+        }
+
+        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+
+        float dist = max(-mvPosition.z, 0.8);
+        float rawSize = (aScale + waveBoost * 1.2) * (310.0 / dist);
+        gl_PointSize = clamp(rawSize, 1.5, 62.0);
+
+        vColor = mix(aColor, vec3(1.0), waveBoost * 0.6);
+        float twinkle = 0.72 + 0.28 * sin(uTime * 4.2 + aPhase);
+        float nearFade = smoothstep(0.6, 2.5, -mvPosition.z);
+        vAlpha = twinkle * (0.2 + 0.8 * ease) * uFadeOut * nearFade;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      varying float vAlpha;
+
+      void main() {
+        if (vAlpha <= 0.005) discard;
+        float d = length(gl_PointCoord - vec2(0.5));
+        if (d > 0.5) discard;
+        float glow = pow(1.0 - d * 2.0, 2.3);
+        vec3 finalColor = mix(vColor, vec3(1.0), pow(glow, 3.0) * 0.55);
+        gl_FragColor = vec4(finalColor, glow * vAlpha);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+
+  const dnaPoints = new THREE.Points(dnaGeo, dnaMat);
+  dnaGroup.add(dnaPoints);
+
+  // 2. Ambient Space Dust
+  const dustCount = 1200;
+  const dustPos = new Float32Array(dustCount * 3);
+  const dustCol = new Float32Array(dustCount * 3);
+  for (let i = 0; i < dustCount; i++) {
+    const i3 = i * 3;
+    dustPos[i3] = (Math.random() - 0.5) * 30;
+    dustPos[i3 + 1] = (Math.random() - 0.5) * 34;
+    dustPos[i3 + 2] = (Math.random() - 0.5) * 30;
+    const c = Math.random() > 0.5 ? cyan : purple;
+    dustCol[i3] = c.r;
+    dustCol[i3 + 1] = c.g;
+    dustCol[i3 + 2] = c.b;
+  }
+  const dustGeo = new THREE.BufferGeometry();
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+  dustGeo.setAttribute('color', new THREE.BufferAttribute(dustCol, 3));
+
+  function createDotTexture() {
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 64;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.35, 'rgba(180,220,255,0.4)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+
+  const dustMat = new THREE.PointsMaterial({
+    size: 0.35,
+    map: createDotTexture(),
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const dustPoints = new THREE.Points(dustGeo, dustMat);
+  scene.add(dustPoints);
+
+  // Optional Silent Recorder (Press 'R' to record a clean 30s 1080x1320 clip with zero on-screen UI)
+  let elapsed = 0;
+  let lastNow = performance.now();
+  let isRecording = false;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+
+  function resetAnimation() {
+    elapsed = 0;
+    lastNow = performance.now();
+    dnaMat.uniforms.uProgress.value = 0;
+    dnaMat.uniforms.uWarpTime.value = 0;
+    dnaMat.uniforms.uFadeOut.value = 1;
+    dustMat.opacity = 0.55;
+  }
+
+  function toggleRecord() {
+    if (isRecording) return;
+    resetAnimation();
+    recordedChunks = [];
+
+    const stream = renderer.domElement.captureStream(60);
+    const mimeTypes = [
+      'video/mp4;codecs=avc1.42E01E',
+      'video/mp4',
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm'
+    ];
+    const selectedMime = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || '';
+    const ext = selectedMime.includes('mp4') ? 'mp4' : 'webm';
+
+    try {
+      mediaRecorder = new MediaRecorder(stream, {
+        mimeType: selectedMime || undefined,
+        videoBitsPerSecond: 14000000
+      });
+    } catch (e) {
+      mediaRecorder = new MediaRecorder(stream);
+    }
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: selectedMime || 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `3D-DNA-Flythrough-1080x1320.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      isRecording = false;
+    };
+
+    isRecording = true;
+    mediaRecorder.start(100);
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyR' && !isRecording) toggleRecord();
+    if (e.code === 'Space' && !isRecording) resetAnimation();
+  });
+
+  function smoothstep(x) {
+    const t = Math.min(Math.max(x, 0), 1);
+    return t * t * (3 - 2 * t);
+  }
+
+  const lookTarget = new THREE.Vector3(0, 0, 0);
+
+  function animate(now) {
+    requestAnimationFrame(animate);
+    const delta = Math.min((now - lastNow) / 1000, 0.05);
+    lastNow = now;
+    elapsed += delta;
+
+    const t = isRecording ? Math.min(elapsed, DURATION) : (elapsed % DURATION);
+
+    // Assembly (0.3s - 3.8s)
+    const progress = Math.min(Math.max((t - 0.3) / 3.5, 0), 1);
+    dnaMat.uniforms.uTime.value = t;
+    dnaMat.uniforms.uProgress.value = progress;
+
+    // Warp Explosion & Clean Fade Out (25.5s - 29.8s)
+    if (t >= 25.5) {
+      const wt = t - 25.5;
+      dnaMat.uniforms.uWarpTime.value = wt;
+      dnaMat.uniforms.uFadeOut.value = Math.max(0, 1 - wt / 4.2);
+    } else {
+      dnaMat.uniforms.uWarpTime.value = 0;
+      dnaMat.uniforms.uFadeOut.value = 1;
+    }
+
+    dnaGroup.rotation.y = t * 0.58;
+    const insideFactor = smoothstep((t - 8.5) / 2.5) * (1 - smoothstep((t - 17.5) / 2.5));
+    dnaGroup.rotation.z = Math.sin(t * 0.35) * 0.14 * (1 - insideFactor);
+    dustPoints.rotation.y = -t * 0.06;
+
+    if (t > 26.0) {
+      dustMat.opacity = Math.max(0, 0.55 * (1 - (t - 26.0) / 3.8));
+    } else {
+      dustMat.opacity = 0.55;
+    }
+
+    // CINEMATIC DEEP ZOOM FLY-THROUGH CAMERA
+    let camX = 0, camY = 0, camZ = BASE_Z;
+    let lookX = 0, lookY = 0, lookZ = 0;
+
+    if (t < 8.0) {
+      camX = Math.sin(t * 0.3) * 1.4;
+      camY = Math.cos(t * 0.25) * 0.8;
+      camZ = BASE_Z - Math.sin(t * 0.2) * 1.2;
+    } else if (t < 11.5) {
+      const p = smoothstep((t - 8.0) / 3.5);
+      camX = THREE.MathUtils.lerp(Math.sin(8.0 * 0.3) * 1.4, 0.65, p);
+      camY = THREE.MathUtils.lerp(Math.cos(8.0 * 0.25) * 0.8, -5.2, p);
+      camZ = THREE.MathUtils.lerp(BASE_Z - Math.sin(8.0 * 0.2) * 1.2, 2.0, p);
+      lookY = THREE.MathUtils.lerp(0, 2.2, p);
+    } else if (t < 18.0) {
+      const p = (t - 11.5) / 6.5;
+      const angle = p * Math.PI * 1.8;
+      camX = Math.cos(angle) * 0.95;
+      camZ = Math.sin(angle) * 0.95 + 0.5;
+      camY = THREE.MathUtils.lerp(-5.2, 5.2, p);
+      lookX = Math.cos(angle + 0.8) * 0.4;
+      lookY = camY + 4.2;
+      lookZ = Math.sin(angle + 0.8) * 0.4;
+    } else if (t < 21.8) {
+      const p = smoothstep((t - 18.0) / 3.8);
+      const endAngle = Math.PI * 1.8;
+      camX = THREE.MathUtils.lerp(Math.cos(endAngle) * 0.95, 0, p);
+      camY = THREE.MathUtils.lerp(5.2, 0, p);
+      camZ = THREE.MathUtils.lerp(Math.sin(endAngle) * 0.95 + 0.5, BASE_Z, p);
+      lookY = THREE.MathUtils.lerp(9.4, 0, p);
+    } else {
+      const ct = t - 21.8;
+      camX = Math.sin(ct * 0.35) * 1.2;
+      camY = 0;
+      camZ = BASE_Z + ct * 0.35;
+    }
+
+    camera.position.set(camX, camY, camZ);
+    lookTarget.set(lookX, lookY, lookZ);
+    camera.lookAt(lookTarget);
+
+    renderer.render(scene, camera);
+
+    if (isRecording && elapsed >= DURATION) {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+    }
+  }
+
+  requestAnimationFrame(animate);
+</script>
+</body>
+</html>
